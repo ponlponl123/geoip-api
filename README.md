@@ -56,11 +56,91 @@ bun run build
 ./bin/index
 ```
 
-## API
+## API Reference
 
-### `GET /`
+### 1. Client IP Info (`GET /`)
+Extracts and inspects the client's IP from proxy headers or connection info.
 
-Returns client IP information extracted from request headers or socket.
+**Response:** `text/plain`
+```text
+Hello, World!
+Your IP: 1.1.1.1
+{
+  "version": 4,
+  "address": "1.1.1.1",
+  "family": "IPv4",
+  "isCanonical": true,
+  "isMulticast": false,
+  "isLoopback": false,
+  "isLinkLocal": false,
+  "isPrivate": false,
+  "isPublic": true,
+  "isReserved": false,
+  "isUnicast": true,
+  "isBroadcast": false,
+  "isUnknown": false,
+  "reservedRole": null,
+  "type": "GLOBAL"
+}
+```
+
+---
+
+### 2. Inspect Any IP (`GET /:ip`)
+Parses, normalizes, and validates any given IPv4 or IPv6 address.
+
+**Example:** `GET /192.168.1.1`  
+**Response:** `200 OK` (application/json)
+```json
+{
+  "version": 4,
+  "address": "192.168.1.1",
+  "family": "IPv4",
+  "isCanonical": true,
+  "isMulticast": false,
+  "isLoopback": false,
+  "isLinkLocal": false,
+  "isPrivate": true,
+  "isPublic": false,
+  "isReserved": false,
+  "isUnicast": true,
+  "isBroadcast": false,
+  "isUnknown": false,
+  "reservedRole": null,
+  "type": "PRIVATE"
+}
+```
+
+---
+
+### 3. GeoIP Lookup (`GET /geo/:ip?`)
+Resolves geographic location, ISP, and ASN data for public IPs with 7-day caching.
+
+- **Client GeoIP**: `GET /geo` (resolves requester IP)
+- **Target GeoIP**: `GET /geo/1.1.1.1`
+
+> [!NOTE]
+> **Non-Public IP Gateway Guard**: Private/loopback addresses (e.g. `::1`, `10.0.0.1`, `192.168.1.1`) abort upstream queries immediately and return a `302 Redirect` to `/` or `/:ip`.
+
+**Example:** `GET /geo/1.1.1.1`  
+**Response:** `200 OK` (application/json)
+```json
+{
+  "ip": "1.1.1.1",
+  "ip_version": 4,
+  "continent": { "name": "Oceania", "code": "OC" },
+  "country": { "name": "Australia", "code": "AU" },
+  "region": { "name": "Queensland", "code": "QLD" },
+  "city": "Brisbane",
+  "latitude": -27.4698,
+  "longitude": 153.0251,
+  "timezone": "Australia/Brisbane",
+  "asn": {
+    "asn": "AS13335",
+    "name": "Cloudflare, Inc."
+  }
+}
+```
 
 ## Benchmark
 
