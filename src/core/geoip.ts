@@ -11,12 +11,12 @@ import {
 } from "../utils/geoipParsers";
 
 export class GeoIPService {
-  private async safeFetch(name: string, url: string, targetIp: string, timeoutMs = 2500): Promise<any> {
+  private async safeFetch(name: string, url: string, targetIp: string, customHeaders?: Record<string, string>, timeoutMs = 2500): Promise<any> {
     const start = performance.now();
     try {
       const res = await fetch(url, {
         signal: AbortSignal.timeout(timeoutMs),
-        headers: { "User-Agent": "geoip-api/1.0" },
+        headers: { "User-Agent": "geoip-api/1.0", ...customHeaders },
       });
       const dur = performance.now() - start;
       logger.outgoing(name, targetIp, dur, res.status);
@@ -49,7 +49,12 @@ export class GeoIPService {
       ...(token
         ? [
             async () => {
-              const d = await this.safeFetch("ipinfo.io", `https://ipinfo.io/${ip}?token=${token}`, ip);
+              const d = await this.safeFetch(
+                "ipinfo.io",
+                `https://ipinfo.io/${ip}`,
+                ip,
+                { Authorization: `Bearer ${token}` },
+              );
               return parseIpInfo(d, ip);
             },
           ]
