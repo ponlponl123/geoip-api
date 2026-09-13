@@ -45,45 +45,75 @@ export class GeoIPService {
 
     // 2. Sequential fallback execution (no parallel calls to preserve quota)
     const token = process.env.IPINFO_TOKEN;
-    const providers: Array<() => Promise<GeoIPResponse | null>> = [
-      ...(token
-        ? [
-            async () => {
-              const d = await this.safeFetch(
-                "ipinfo.io",
-                `https://ipinfo.io/${ip}`,
-                ip,
-                { Authorization: `Bearer ${token}` },
-              );
-              return parseIpInfo(d, ip);
-            },
-          ]
-        : []),
-      async () => {
-        const d = await this.safeFetch("freeipapi.com", `https://freeipapi.com/api/json/${ip}`, ip);
-        return parseFreeIpApi(d, ip);
+    const allProviders = [
+      {
+        name: "ipinfo.io",
+        fetch: async () => {
+          if (!token) return null;
+          const d = await this.safeFetch(
+            "ipinfo.io",
+            `https://ipinfo.io/${ip}`,
+            ip,
+            { Authorization: `Bearer ${token}` },
+          );
+          return parseIpInfo(d, ip);
+        },
       },
-      async () => {
-        const d = await this.safeFetch(
-          "ip-api.com",
-          `http://ip-api.com/json/${ip}?fields=status,message,continent,continentCode,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,offset,currency,isp,org,as,asname,mobile,proxy,hosting,query`,
-          ip,
-        );
-        return parseIpApi(d, ip);
+      {
+        name: "freeipapi.com",
+        fetch: async () => {
+          const d = await this.safeFetch("freeipapi.com", `https://freeipapi.com/api/json/${ip}`, ip);
+          return parseFreeIpApi(d, ip);
+        },
       },
-      async () => {
-        const d = await this.safeFetch("country.is", `https://api.country.is/${ip}`, ip);
-        return parseCountryIs(d, ip);
+      {
+        name: "ip-api.com",
+        fetch: async () => {
+          const d = await this.safeFetch(
+            "ip-api.com",
+            `http://ip-api.com/json/${ip}?fields=status,message,continent,continentCode,country,countryCode,region,regionName,city,district,zip,lat,lon,timezone,offset,currency,isp,org,as,asname,mobile,proxy,hosting,query`,
+            ip,
+          );
+          return parseIpApi(d, ip);
+        },
       },
-      async () => {
-        const d = await this.safeFetch("hackertarget.com", `https://api.hackertarget.com/geoip/?q=${ip}&output=json`, ip);
-        return parseHackerTarget(d, ip);
+      {
+        name: "country.is",
+        fetch: async () => {
+          const d = await this.safeFetch("country.is", `https://api.country.is/${ip}`, ip);
+          return parseCountryIs(d, ip);
+        },
+      },
+      {
+        name: "hackertarget.com",
+        fetch: async () => {
+          const d = await this.safeFetch("hackertarget.com", `https://api.hackertarget.com/geoip/?q=${ip}&output=json`, ip);
+          return parseHackerTarget(d, ip);
+        },
       },
     ];
 
-    for (const fetcher of providers) {
+    const orderEnv = process.env.PROVIDER_ORDER?.replace(/#.*$/, "").trim().replace(/^["']|["']$/g, "").trim();
+    let providers = allProviders;
+    if (orderEnv) {
+      const tokens = orderEnv.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+      const ordered: typeof allProviders = [];
+      for (const t of tokens) {
+        const idx = Number(t);
+        const match = !isNaN(idx) ? allProviders[idx] : allProviders.find((p) => p.name.toLowerCase().includes(t));
+        if (match && !ordered.includes(match)) {
+          ordered.push(match);
+        }
+      }
+      for (const p of allProviders) {
+        if (!ordered.includes(p)) ordered.push(p);
+      }
+      providers = ordered;
+    }
+
+    for (const provider of providers) {
       try {
-        const result = await fetcher();
+        const result = await provider.fetch();
         if (result && (result.country || result.city || result.asn)) {
           if (!result.ip_version && parsedIp.version) {
             result.ip_version = parsedIp.version;
