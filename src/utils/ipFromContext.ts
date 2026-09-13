@@ -2,7 +2,12 @@ import type { Context } from "hono";
 import { getConnInfo } from "hono/bun";
 
 export function ipFromContext(c: Context) {
-    return getConnInfo(c)?.remote?.address ??
+    let remote: string | undefined;
+    try {
+        remote = getConnInfo(c)?.remote?.address;
+    } catch {}
+
+    return remote ??
         c.req.header("cf-connecting-ip") ??
         c.req.header("x-forwarded-for") ??
         c.req.header("true-client-ip") ??

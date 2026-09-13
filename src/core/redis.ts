@@ -3,9 +3,13 @@ import Redis, { type RedisOptions, type SentinelAddress } from "ioredis";
 
 export class RedisClient {
   public redis: Redis;
+  public readonly isEnabled: boolean;
 
   constructor() {
+    const clean = (s?: string) => s?.replace(/#.*$/, "").trim().replace(/^["']|["']$/g, "").trim();
+
     const {
+      REDIS_ENABLED = "true",
       REDIS_URL,
       REDIS_HOST = "127.0.0.1",
       REDIS_PORT = "6379",
@@ -23,26 +27,37 @@ export class RedisClient {
       REDIS_TLS_REJECT_UNAUTHORIZED,
     } = process.env;
 
+    const enabledVal = clean(REDIS_ENABLED);
+    this.isEnabled = enabledVal !== "false" && enabledVal !== "0";
+
     const read = (p?: string) => (p && fs.existsSync(p) ? fs.readFileSync(p) : p);
-    const tls = REDIS_TLS === "true" || REDIS_TLS_CA || REDIS_TLS_CERT ? {
-      rejectUnauthorized: REDIS_TLS_REJECT_UNAUTHORIZED !== "false",
-      ...(REDIS_TLS_CA && { ca: read(REDIS_TLS_CA) }),
-      ...(REDIS_TLS_CERT && { cert: read(REDIS_TLS_CERT) }),
-      ...(REDIS_TLS_KEY && { key: read(REDIS_TLS_KEY) }),
+    const tlsVal = clean(REDIS_TLS);
+    const caVal = clean(REDIS_TLS_CA);
+    const certVal = clean(REDIS_TLS_CERT);
+    const keyVal = clean(REDIS_TLS_KEY);
+    const rejectVal = clean(REDIS_TLS_REJECT_UNAUTHORIZED);
+
+    const tls = tlsVal === "true" || caVal || certVal ? {
+      rejectUnauthorized: rejectVal !== "false",
+      ...(caVal && { ca: read(caVal) }),
+      ...(certVal && { cert: read(certVal) }),
+      ...(keyVal && { key: read(keyVal) }),
     } : undefined;
 
-    const sentinels: SentinelAddress[] | undefined = REDIS_SENTINELS
-      ? REDIS_SENTINELS.split(",").map((s) => {
+    const sentinelsStr = clean(REDIS_SENTINELS);
+    const sentinels: SentinelAddress[] | undefined = sentinelsStr
+      ? sentinelsStr.split(",").map((s) => {
           const [host, port] = s.trim().split(":");
           return { host, port: Number(port) || 26379 };
         })
       : undefined;
 
-    const natMap: Record<string, { host: string; port: number }> | undefined = REDIS_NAT_MAP
-      ? REDIS_NAT_MAP.startsWith("{")
-        ? JSON.parse(REDIS_NAT_MAP)
+    const natMapStr = clean(REDIS_NAT_MAP);
+    const natMap: Record<string, { host: string; port: number }> | undefined = natMapStr
+      ? natMapStr.startsWith("{")
+        ? JSON.parse(natMapStr)
         : Object.fromEntries(
-            REDIS_NAT_MAP.split(",").map((entry) => {
+            natMapStr.split(",").map((entry) => {
               const [internal, external] = entry.trim().split("=");
               const [host, port] = (external || "").split(":");
               return [internal, { host: host || "127.0.0.1", port: Number(port) || 6379 }];
@@ -50,34 +65,45 @@ export class RedisClient {
           )
       : undefined;
 
+    const password = clean(REDIS_PASSWORD);
+    const sentinelPassword = clean(REDIS_SENTINEL_PASSWORD);
+    const prefix = clean(REDIS_KEY_PREFIX);
+    const db = Number(clean(REDIS_DB) || "0");
+
     const opts: RedisOptions = {
-      lazyConnect: true,
+      ...(!this.isEnabled && { lazyConnect: true }),
       enableReadyCheck: true,
-      maxRetriesPerRequest: 3,
-      retryStrategy: (times) => (times > 10 ? null : Math.min(times * 200, 3000)),
-      ...(REDIS_KEY_PREFIX && { keyPrefix: REDIS_KEY_PREFIX }),
+      maxRetriesPerRequest: 1,
+      retryStrategy: (times) => (times > 3 ? null : Math.min(times * 200, 1000)),
+      ...(password && { password }),
+      db,
+      ...(prefix && { keyPrefix: prefix }),
       ...(tls && { tls }),
       ...(natMap && { natMap }),
       ...(sentinels
         ? {
-            name: REDIS_SENTINEL_NAME,
+            name: clean(REDIS_SENTINEL_NAME) || "mymaster",
             sentinels,
-            sentinelPassword: REDIS_SENTINEL_PASSWORD,
+            ...(sentinelPassword && { sentinelPassword }),
           }
         : {
-            host: REDIS_HOST,
-            port: Number(REDIS_PORT),
-            password: REDIS_PASSWORD,
-            db: Number(REDIS_DB),
+            host: clean(REDIS_HOST) || "127.0.0.1",
+            port: Number(clean(REDIS_PORT) || "6379"),
           }),
     };
 
-    this.redis = REDIS_URL ? new Redis(REDIS_URL, opts) : new Redis(opts);
+    const url = clean(REDIS_URL);
+    this.redis = url ? new Redis(url, opts) : new Redis(opts);
+
+    // Suppress unhandled error event crashes when Redis is unreachable
+    this.redis.on("error", () => {});
   }
 
   public async connect(): Promise<void> {
-    if (this.redis.status === "wait") {
-      await this.redis.connect();
+    if (this.isEnabled && this.redis.status === "wait") {
+      try {
+        await this.redis.connect();
+      } catch {}
     }
   }
 }

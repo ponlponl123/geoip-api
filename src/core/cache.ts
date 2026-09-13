@@ -1,4 +1,5 @@
 import { redis } from "./redis";
+import { logger } from "./logger";
 
 interface CacheEntry {
   val: string;
@@ -16,30 +17,38 @@ export class Cache {
   }
 
   private isRedisActive(): boolean {
-    return process.env.REDIS_ENABLED !== "false" && redis.redis.status !== "end";
+    return redis.isEnabled && redis.redis.status !== "end";
   }
 
   public async get(key: string): Promise<string | null> {
     if (this.isRedisActive()) {
       try {
         const res = await redis.redis.get(key);
-        if (res !== null) return res;
+        if (res !== null) {
+          logger.cache("HIT", key, "redis");
+          return res;
+        }
       } catch {
         // Fallback to in-memory on Redis error
       }
     }
 
     const entry = this.mem.get(key);
-    if (!entry) return null;
+    if (!entry) {
+      logger.cache("MISS", key);
+      return null;
+    }
 
     if (Date.now() > entry.exp) {
       this.mem.delete(key);
+      logger.cache("MISS", key, "expired");
       return null;
     }
 
     // Refresh LRU order
     this.mem.delete(key);
     this.mem.set(key, entry);
+    logger.cache("HIT", key, "memory");
     return entry.val;
   }
 
@@ -47,6 +56,8 @@ export class Cache {
     if (this.isRedisActive()) {
       try {
         await redis.redis.set(key, val, "EX", ttlSeconds);
+        logger.cache("SET", key, `redis ${ttlSeconds}s`);
+        return;
       } catch {
         // Fallback to in-memory on Redis error
       }
@@ -61,6 +72,7 @@ export class Cache {
       val,
       exp: Date.now() + ttlSeconds * 1000,
     });
+    logger.cache("SET", key, `mem ${ttlSeconds}s`);
   }
 
   public async del(key: string): Promise<void> {
