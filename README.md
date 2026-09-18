@@ -56,6 +56,21 @@ bun run build
 ./bin/index
 ```
 
+## Docker
+
+Pull and run the pre-built image:
+
+```bash
+docker pull ghcr.io/ponlponl123/geoip-api:main
+docker run -d -p 4002:4002 ghcr.io/ponlponl123/geoip-api:main
+```
+
+Or run via Docker Compose:
+
+```bash
+docker compose up -d
+```
+
 ## API Reference
 
 ### 1. Client IP Info (`GET /`)

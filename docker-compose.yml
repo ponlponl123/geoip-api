@@ -1,5 +1,6 @@
 services:
   api:
+    image: ghcr.io/ponlponl123/geoip-api:main
     build: .
     ports:
       - "4002:4002"
