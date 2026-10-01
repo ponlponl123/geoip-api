@@ -9,6 +9,7 @@ const app = new Hono();
 app.use("*", async (c, next) => {
     const start = performance.now();
     const clientIp = ipFromContext(c) || "";
+    logger.trafficPending(c.req.method, c.req.path, clientIp);
     await next();
     logger.traffic(c.req.method, c.req.path, c.res.status, performance.now() - start, clientIp);
 });

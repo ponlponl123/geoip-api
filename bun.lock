@@ -6,6 +6,7 @@
       "dependencies": {
         "hono": "^4.13.7",
         "ioredis": "^6.0.0",
+        "ts-better-console": "^0.1.4",
       },
       "devDependencies": {
         "@types/bun": "^1.4.2",
@@ -36,6 +37,10 @@
     "redis-errors": ["redis-errors@1.2.0", "", {}, "sha512-1qny3OExCf0UvUV/5wpYKf2YwPcOqXzkwKKSmKHiE6ZMQs5heeE/c8eXK+PNllPvmjgAbfnsbpkGZWy8cBpn9w=="],
 
     "standard-as-callback": ["standard-as-callback@2.1.0", "", {}, "sha512-qoRRSyROncaz1z0mvYqIE4lCd9p2R90i6GxW3uZv5ucSu8tU7B5HXUP1gG8pVZsYNVaXjk8ClXHPttLyxAL48A=="],
+
+    "ts-better-console": ["ts-better-console@0.1.4", "", { "peerDependencies": { "typescript": "^5" } }, "sha512-C0WMUBbhklsS9pWvhdZu/hhrx00yAAZnhwMQ7WKikFiuK/mZE5ynfjCNbzdk1mGoKL3hu9onX2gul+pcVyzmDg=="],
+
+    "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
     "undici-types": ["undici-types@6.21.0", "", {}, "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="],
   }

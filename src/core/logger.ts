@@ -1,14 +1,10 @@
-const c = {
-  reset: "\x1b[0m",
-  dim: "\x1b[90m",
-  bold: "\x1b[1m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  magenta: "\x1b[35m",
-  cyan: "\x1b[36m",
-  red: "\x1b[31m",
-};
+import betterConsole, {
+  tsflag,
+  s,
+  Card,
+  rgb,
+  type Color,
+} from "ts-better-console";
 
 export class Logger {
   private readonly isClean: boolean;
@@ -16,9 +12,10 @@ export class Logger {
   private readonly modes: Set<string>;
 
   constructor() {
-    const raw = (process.env.LOGGING || "clean").toLowerCase();
-    const list = raw.split(",").map((s) => s.trim());
-    this.isClean = list.includes("clean") || list.includes("none") || !process.env.LOGGING;
+    const raw = ((typeof process !== "undefined" ? process.env.LOGGING : Bun.env.LOGGING) || "clean").toLowerCase();
+    const list = raw.split(",").map((item: string) => item.trim());
+    const hasEnv = typeof process !== "undefined" ? Boolean(process.env.LOGGING) : Boolean(Bun.env.LOGGING);
+    this.isClean = list.includes("clean") || list.includes("none") || !hasEnv;
     this.isVerbose = !this.isClean && list.includes("verbose");
     this.modes = new Set(list);
   }
@@ -29,51 +26,77 @@ export class Logger {
     return this.modes.has(type);
   }
 
-  private time(): string {
-    return `${c.dim}${new Date().toLocaleTimeString().padStart(11)}${c.reset}`;
+  public trafficPending(method: string, path: string, from?: string): void {
+    if (!this.isEnabled("traffic")) return;
+    const mColor: Color = method === "GET" ? "green" : method === "POST" ? "yellow" : "magenta";
+    const m = s(method.padEnd(5), { color: mColor, styles: ["bold"] });
+    const p = path.padEnd(20);
+    const st = s("PENDING", { color: "yellow", styles: ["bold"] });
+    const f = from ? s(` (${from})`, { color: "gray" }) : "";
+
+    betterConsole.log(tsflag("info", true, `${m} ${p}${f} ${st}`));
   }
 
   public traffic(method: string, path: string, status: number, durationMs: number, from?: string): void {
     if (!this.isEnabled("traffic")) return;
-    const tag = `${c.cyan}[TRAFFIC] ${c.reset}`;
-    const mColor = method === "GET" ? c.green : method === "POST" ? c.yellow : c.magenta;
-    const sColor = status < 300 ? c.green : status < 500 ? c.yellow : c.red;
-    const m = `${mColor}${method.padEnd(5)}${c.reset}`;
-    const s = `${sColor}${String(status).padEnd(4)}${c.reset}`;
-    const dur = `${c.dim}${durationMs.toFixed(1).padStart(7)}ms${c.reset}`;
-    const f = from ? ` ${c.dim}(${from})${c.reset}` : "";
-    console.log(`${this.time()} ${tag} ${m} ${path.padEnd(20)} ${f} ${s} ${dur}`);
+    const mColor: Color = method === "GET" ? "green" : method === "POST" ? "yellow" : "magenta";
+    const sColor: Color = status < 300 ? "green" : status < 500 ? "yellow" : "red";
+
+    const m = s(method.padEnd(5), { color: mColor, styles: ["bold"] });
+    const p = path.padEnd(20);
+    const st = s(String(status).padEnd(4), { color: sColor });
+    const dur = s(`${durationMs.toFixed(1).padStart(7)}ms`, { color: "gray" });
+    const f = from ? s(` (${from})`, { color: "gray" }) : "";
+
+    betterConsole.log(tsflag("info", true, `${m} ${p}${f} ${st} ${dur}`));
   }
 
   public cache(action: "HIT" | "MISS" | "SET" | "ERROR", key: string, extra?: string): void {
     if (!this.isEnabled("cache")) return;
-    const tag = `${c.magenta}[CACHE]   ${c.reset}`;
-    const aColor = action === "HIT" ? c.green : action === "SET" ? c.cyan : action === "MISS" ? c.yellow : c.red;
-    const act = `${aColor}${action.padEnd(5)}${c.reset}`;
-    const detail = extra ? ` ${c.dim}(${extra})${c.reset}` : "";
-    console.log(`${this.time()} ${tag} ${act} ${key}${detail}`);
+    const aColor: Color = action === "HIT" ? "green" : action === "SET" ? "cyan" : action === "MISS" ? "yellow" : "red";
+    const act = s(action.padEnd(5), { color: aColor, styles: ["bold"] });
+    const detail = extra ? s(` (${extra})`, { color: "gray" }) : "";
+    const prefix = s("[CACHE]", { color: "magenta" });
+
+    betterConsole.log(tsflag("info", true, `${prefix} ${act} ${key}${detail}`));
   }
 
   public outgoing(provider: string, target: string, durationMs?: number, status?: number | string): void {
     if (!this.isEnabled("outgoing") && !this.isEnabled("outgoing request")) return;
-    const tag = `${c.blue}[OUTGOING]${c.reset}`;
-    const p = `${c.bold}${provider.padEnd(15)}${c.reset}`;
+    const prefix = s("[OUTGOING]", { color: "blue" });
+    const p = s(provider.padEnd(15), { styles: ["bold"] });
     const isOk = status === 200 || status === "200";
-    const stat = status !== undefined ? `${isOk ? c.green : c.red}[${status}]${c.reset} ` : "";
-    const dur = durationMs !== undefined ? `${c.dim}${durationMs.toFixed(0).padStart(5)}ms${c.reset}` : "";
-    console.log(`${this.time()} ${tag} ${p} -> ${target.padEnd(16)} ${stat}${dur}`);
+    const stat = status !== undefined ? s(`[${status}] `, { color: isOk ? "green" : "red" }) : "";
+    const dur = durationMs !== undefined ? s(`${durationMs.toFixed(0).padStart(5)}ms`, { color: "gray" }) : "";
+
+    betterConsole.log(tsflag("info", true, `${prefix} ${p} -> ${target.padEnd(16)} ${stat}${dur}`));
   }
 
   public info(msg: string): void {
     if (this.isClean || !this.isVerbose) return;
-    const tag = `${c.dim}[INFO]    ${c.reset}`;
-    console.log(`${this.time()} ${tag} ${msg}`);
+    betterConsole.log(tsflag("info", true, msg));
+  }
+
+  public warn(msg: string): void {
+    if (this.isClean) return;
+    betterConsole.warn(tsflag("warn", true, s(msg, { color: "yellow" })));
   }
 
   public error(msg: string, err?: unknown): void {
     if (this.isClean) return;
-    const tag = `${c.red}${c.bold}[ERROR]   ${c.reset}`;
-    console.error(`${this.time()} ${tag} ${c.red}${msg}${c.reset}`, err ?? "");
+    betterConsole.error(tsflag("error", true, s(msg, { color: "red" })), err ?? "");
+  }
+
+  public card(content: string, color = rgb(59, 130, 246)): void {
+    new Card(content, undefined, {
+      border: {
+        style: { color },
+        symbols: { style: "round" },
+      },
+    })
+      .render()
+      .split("\n")
+      .forEach((line) => betterConsole.log(line));
   }
 }
 

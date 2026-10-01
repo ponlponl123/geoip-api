@@ -17,7 +17,7 @@ export class Cache {
   }
 
   private isRedisActive(): boolean {
-    return redis.isEnabled && redis.redis.status !== "end";
+    return redis.isEnabled && redis.redis.status === "ready";
   }
 
   public async get(key: string): Promise<string | null> {

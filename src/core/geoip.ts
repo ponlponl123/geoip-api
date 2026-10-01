@@ -11,6 +11,8 @@ import {
 } from "../utils/geoipParsers";
 
 export class GeoIPService {
+  private inFlight = new Map<string, Promise<GeoIPResponse | null>>();
+
   private async safeFetch(name: string, url: string, targetIp: string, customHeaders?: Record<string, string>, timeoutMs = 2500): Promise<any> {
     const start = performance.now();
     try {
@@ -36,6 +38,9 @@ export class GeoIPService {
 
     // 1. Cache hit check (7 days TTL)
     const cacheKey = `geoip:${ip}`;
+    const inFlightPromise = this.inFlight.get(cacheKey);
+    if (inFlightPromise) return inFlightPromise;
+
     const cached = await cache.get(cacheKey);
     if (cached) {
       try {
@@ -111,22 +116,30 @@ export class GeoIPService {
       providers = ordered;
     }
 
-    for (const provider of providers) {
-      try {
-        const result = await provider.fetch();
-        if (result && (result.country || result.city || result.asn)) {
-          if (!result.ip_version && parsedIp.version) {
-            result.ip_version = parsedIp.version;
+    const execPromise: Promise<GeoIPResponse | null> = (async () => {
+      for (const provider of providers) {
+        try {
+          const result = await provider.fetch();
+          if (result && (result.country || result.city || result.asn)) {
+            if (!result.ip_version && parsedIp.version) {
+              result.ip_version = parsedIp.version;
+            }
+            await cache.set(cacheKey, JSON.stringify(result));
+            return result;
           }
-          await cache.set(cacheKey, JSON.stringify(result));
-          return result;
+        } catch {
+          // Fall through to next provider on failure
         }
-      } catch {
-        // Fall through to next provider on failure
       }
-    }
+      return null;
+    })();
 
-    return null;
+    this.inFlight.set(cacheKey, execPromise);
+    try {
+      return await execPromise;
+    } finally {
+      this.inFlight.delete(cacheKey);
+    }
   }
 }
 
